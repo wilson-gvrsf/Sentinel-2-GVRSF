@@ -78,6 +78,8 @@ class LandType:
 def get_aoi(lon, lat, box_width, box_height):
     """Create area of interest geometry"""
     # Convert box dimensions from meters to degrees (approximate)
+    #CHIMA COMMENTS: don't think the 110540m conversion is exactly the right
+    #             width (long) changes with latitude... think these are both in code snippets I sent      
     width_deg = box_width / 111320  # meters to degrees longitude
     height_deg = box_height / 110540  # meters to degrees latitude
     
@@ -86,6 +88,7 @@ def get_aoi(lon, lat, box_width, box_height):
         lon + width_deg/2, lat + height_deg/2
     ])
 
+# CHIMA COMMENTS: even if this is for tests, I'd still make it more generalized
 class SEA_CroplandProcessor:
     """Southeast Asia Cropland Processing with Advanced Masking"""
     
@@ -206,10 +209,12 @@ class SEA_CroplandProcessor:
             .filterDate(self.Dates[0], self.Dates[1])
             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))  # Pre-filter cloudy images
             .limit(10))  # Limit to first 10 images for faster processing
+        #CHIMA COMMENTS: above, if you limit to only the 1st 10 images, your masking wont work for everything!!!
         
         print(f"Filtering from {self.Dates[0]} to {self.Dates[1]}")
         initial_count = filtered_s2_date_area.size().getInfo()
         print(f"Number of images found (after cloud pre-filter): {initial_count}")
+        #CHIMA COMMENTS: Also print number of images in collection. This will help you see problem with above lines
         
         if initial_count == 0:
             print("❌ No images found after initial filtering!")
@@ -245,6 +250,7 @@ class SEA_CroplandProcessor:
 
         return final_s2
 
+#CHIMA COMMENTS: don't think you'll actually need
 def create_rgb_composite(image):
     """Create RGB composite from Sentinel-2 bands (B4, B3, B2)"""
     rgb = image.select(['B4', 'B3', 'B2']).multiply(0.0001)
@@ -257,7 +263,7 @@ def create_false_color_composite(image):
 
 def visualize_image(image, region, vis_params, title="Sentinel-2 Image"):
     """Visualize image using matplotlib with direct URL"""
-    try:
+    try:#CHIMA COMMENTS: comment this more where you explain each of the steps in the code
         print(f"   ⏳ Processing {title}...")
         
         thumbnail_params = {
@@ -297,6 +303,7 @@ def visualize_image(image, region, vis_params, title="Sentinel-2 Image"):
         print(f"   ❌ Error generating {title}: {e}")
         return False
 
+#CHIMA COMMENTS: allow input of variables location, box_size, years instead of hard coding in the function
 def main_sea_cropland_analysis():
     """
     Main processing pipeline for Southeast Asia cropland analysis
@@ -310,7 +317,7 @@ def main_sea_cropland_analysis():
     print("🌾 Southeast Asia Cropland Analysis")
     print("=" * 50)
     print(f"📍 Location: {location[1]:.2f}°N, {location[0]:.2f}°E")
-    print(f"📐 Area: {box_size[0]/1000}km x {box_size[1]/1000}km")
+    print(f"📐 Area: {box_size[0]/1000}km x {box_size[1]/1000}km") #converting to meters
     
     # Define date range - dry season for better imaging (SHORTER PERIOD)
     years = ['2024']  # Single year for faster processing
@@ -334,6 +341,9 @@ def main_sea_cropland_analysis():
     
     # Get the best image (least cloudy)
     best_image = collection.first()
+    #CHIMA COMMENTS: this is wrong rn. It is only giving the 1st image, which isn't necessarily the best
+    #                To get the best, you'd use your count 'flag' added to the land_masked_collection_with_counts 
+    #                colllection and then pick the image with the highest counts
     
     # Create composites
     rgb_image = create_rgb_composite(best_image)
@@ -373,6 +383,9 @@ def main_sea_cropland_analysis():
     visualize_image(processor.RegionMap, processor.AoI_geom, cropland_vis,
                    "Southeast Asia - Cropland Areas (Yellow)")
     
+    #CHIMA COMMENTS: I would change this to composite (think about how you want to combine images mean, max, mode) multiple months worth of data
+    #                then plot the differnt composite timeframes
+    
     return {
         'processor': processor,
         'collection': collection,
@@ -382,6 +395,7 @@ def main_sea_cropland_analysis():
     }
 
 if __name__ == "__main__":
+    #CHIMA COMMENTS: Test for multiple regions to ensure correctness. i.e different 
     try:
         results = main_sea_cropland_analysis()
         print("\n🎉 Southeast Asia cropland analysis completed successfully!")
@@ -392,4 +406,5 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"❌ Error in processing: {e}")
+
         print("Make sure Google Earth Engine is properly authenticated and initialized")
