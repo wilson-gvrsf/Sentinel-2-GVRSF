@@ -62,6 +62,8 @@ class LandTypeMask:
         Returns binary mask: 1 = cropland, 0 = other land types
         """
         # Get most recent WorldCover image
+        #CHIMA COMMMENT: This is probably fine, because normally cropland is going to stay cropland throughout a year. 
+        #                However a more robust way to do this would be either taken the mode value, or the most recent image
         worldcover_image = self.worldcover.first().clip(geometry)
         
         # Create binary cropland mask (1 = cropland, 0 = everything else)
@@ -227,6 +229,12 @@ class NDTIProcessor:
         Returns:
             ee.Image: Image masked to cropland areas only
         """
+        #CHIMA COMMMENT: 1) GEE has it's own built in reprojecting that it applies when combining 2 seperate images. I've noticed some
+        #                issues when reprojecting manually as done here, sometimes.
+        #                2) the resolution of the B11 and B12 bands is 20meters NOT 10m as the B4 band, which you use to reproject the cropland data
+        #                So actually this reprojection is a waste, because GEE has to reproject again to 20m when used on the B11 and B12 banse
+        #                3) You can see detail about the Sentinel-2 data (like band resolution and wavelength) from here: 
+        #                   https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-2/bands/
         # Reproject cropland mask to match Sentinel-2 resolution for efficiency
         cropland_reprojected = self.cropland_mask.reproject(
             crs=image.select('B4').projection(), 
@@ -259,6 +267,7 @@ class NDTIProcessor:
             maxPixels=1e9,
             bestEffort=True
         )
+        #CHIMA COMMMENT: Makes sense to work with 20m resolution here since that's the res of B11 and B12 bands
         
         count = count_dict.values().get(0)
         return image.set('valid_pixel_count', count)
@@ -293,6 +302,9 @@ class NDTIProcessor:
             
         s2_collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
         cs_plus_collection = ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED')
+
+        #CHIMA COMMMENT: Not necessary at all, but it'd be nice to see the number of valid images before filtering, just to identify if filtering might
+        #              be too agressive
         
         # 2. Initial filtering by date, area, and cloud cover
         if self.verbose:
@@ -302,6 +314,8 @@ class NDTIProcessor:
                       .filterDate(self.date_range[0], self.date_range[1])
                       .filterBounds(self.aoi_geometry)
                       .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30)))  # Pre-filter high cloud images
+        #CHIMA COMMMENT: Think the 'CLOUDY_PIXEL_PERCENTAGE' filter is uncessary since you already filter when an image is covered by 80% clouds
+        #               if you want more strict cloud filtering then just change 'clear_threshold' to a lower value rather than adding more code
         
         initial_count = filtered_s2.size().getInfo()
         if self.verbose:
@@ -314,7 +328,8 @@ class NDTIProcessor:
         # 3. Link with Cloud Score+ and apply advanced masking
         if self.verbose:
             print("3️⃣  Applying advanced cloud and shadow masking...")
-            
+        #CHIMA COMMMENT: Misprint. You're next step is applying ALL masking (cloud, shadow, and landtype). As well as calculating the NDTI
+        
         def apply_all_masks(image):
             """Apply cloud masking, cropland masking, and NDTI calculation"""
             # Cloud masking
@@ -339,8 +354,11 @@ class NDTIProcessor:
             
         final_collection = processed_collection.filter(
             ee.Filter.gt('valid_pixel_count', min_valid_pixels)
-        )
-        
+        ) #CHIMA COMMMENT: Might make more sense to have 'min_valid_pixels' be realtive to how many total pixels there could be
+          #                That way in case there's a lot of missing pixels do to the crop region being small, you aren't removing 
+          #                useful data. You'd have to count the total pixels of the first image after just applying the landtype
+          #                and aoi mask for this
+      
         final_count = final_collection.size().getInfo()
         removed_count = initial_count - final_count
         
@@ -687,4 +705,5 @@ if __name__ == "__main__":
             
     except Exception as e:
         print(f"❌ Critical error in NDTI processing: {e}")
+
         print("Ensure Google Earth Engine authentication and project setup are correct")
